@@ -34,8 +34,10 @@ class Predictor(BasePredictor):
             weight_dtype = torch.bfloat16
 
         model = FastComposerModel.from_pretrained(args)
-        ckpt_file = "model/fastcomposer/pytorch_model.bin"
-        model.load_state_dict(torch.load(ckpt_file, map_location="cpu"))
+
+        ckpt_file = os.path.join(os.getcwd(), "model/fastcomposer/pytorch_model.bin")
+        model.load_state_dict(torch.load(ckpt_file)) #, map_location="cpu"
+
         model = model.to(dtype=weight_dtype, device=device)
 
         tokenizer = CLIPTokenizer.from_pretrained(
@@ -49,7 +51,6 @@ class Predictor(BasePredictor):
         self.pipe = StableDiffusionFastCompposerPipeline.from_pretrained(
             args.pretrained_model_name_or_path, torch_dtype=weight_dtype
         ).to(device)
-
         self.pipe.object_transforms = torch.nn.Sequential(
             OrderedDict(
                 [
@@ -113,6 +114,10 @@ class Predictor(BasePredictor):
             description="Height of output image.",
             default=512,
         ),
+        output_dir: Path = Input(
+            description="location to store output image.",
+            default=os.getcwd(),
+        ),
         seed: int = Input(
             description="Random seed. Leave blank to randomize the seed.", default=None
         ),
@@ -153,7 +158,7 @@ class Predictor(BasePredictor):
 
         output = []
         for i, img in enumerate(images):
-            out = f"/tmp/out_{i}.png"
+            out = os.path.join(output_dir, "out_{i}.png")
             img.save(out)
             output.append(Path(out))
 
@@ -198,7 +203,7 @@ def load_default_args():
         hub_token=None,
         hub_model_id=None,
         logging_dir="logs",
-        mixed_precision=None,
+        mixed_precision=True,
         report_to=None,
         local_rank=-1,
         checkpointing_steps=500,
@@ -282,3 +287,40 @@ def load_default_args():
         inference_split="eval",
         num_batches=1,
     )
+
+def main(args):
+    # Create an instance of the Predictor class
+    predictor = Predictor()
+    predictor.setup()
+    print('ss1')
+    # Call the predict method with the provided command-line arguments
+    output_paths = predictor.predict(
+        image1=args.image1,
+        image2=args.image2,
+        prompt=args.prompt,
+        alpha=args.alpha,
+        num_steps=args.num_steps,
+        num_images_per_prompt=args.num_images_per_prompt,
+        guidance_scale=args.guidance_scale,
+        height=args.height,
+        width=args.width,
+        seed=args.seed
+    )
+    return output_paths
+    # Print or handle the output paths as needed
+    print("Output paths:", output_paths)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Script for running prediction.")
+    parser.add_argument("--image1", help="Path to the first input image")
+    parser.add_argument("--image2", default=None, help="Path to the second input image")
+    parser.add_argument("--prompt", type=str, help="Prompt for the prediction")
+    parser.add_argument("--alpha", type=float, default=0.7, help="Alpha value")
+    parser.add_argument("--num_steps", type=int, default=50, help="Number of steps")
+    parser.add_argument("--num_images_per_prompt", type=int, default=4, help="Number of images per prompt")
+    parser.add_argument("--guidance_scale", type=float, default=5.0, help="Guidance scale")
+    parser.add_argument("--width", type=int, default=512, help="Width of output image")
+    parser.add_argument("--height", type=int, default=512, help="Height of output image")
+    parser.add_argument("--seed", type=int, default=None, help="Random seed")
+    args = parser.parse_args()
+    main(args)
